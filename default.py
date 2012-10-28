@@ -69,35 +69,23 @@ password = xbmcplugin.getSetting(thisPlugin,'password')
 # if a programme has been selected
 if sys.argv[2] is not '':
 
-  alert('Reading params')
   params = readParams(sys.argv[2])
-  alert('Done. Logging in.')
   login(params['username'], params['password'])
-  alert('Done. Querying database.')
   res = process('programme/'+params['diskref'])
-  alert('Done. Parsing JSON')
-  jres = json.dump(json.loads(res.read()))
-  alert('Done. Writing results')
-  #sys.stderr.write(str(jres))
+  jres = json.loads(res.read())
 
-  #if '2m-mp4' in jres['media']:
-    #alert('mp3')
-  #  url = jres['media']['2m-mp4']['uri']
-  #elif 'mp4-hi' in jres['media']:
-    #alert('mp4-hi')
-  #  url = jres['media']['mp4-hi']['uri']
-  #elif 'mp4-lo' in jres['media']:
-    #alert('mp4-lo')
-  #  url = jres['media']['mp4-lo']['uri']
-  #elif 'mp3' in jres['media']:
-  #  url = jres['media']['mp3']['uri']
-  #else:
-    #alert('other')
-  url = jres['media']['m2ts']['uri']
-  sys.stderr.write('URL: '+url)
-  alert('Done')
-  #xbmc.Player( xbmc.PLAYER_CORE_MPLAYER ).play(url)
-  #xbmcplugin.endOfDirectory(int(params['thisplugin']))
+  if '2m-mp4' in jres['media']:
+    url = jres['media']['2m-mp4']['uri']
+  elif 'mp4-hi' in jres['media']:
+    url = jres['media']['mp4-hi']['uri']
+  elif 'mp4-lo' in jres['media']:
+    url = jres['media']['mp4-lo']['uri']
+  elif 'mp3' in jres['media']:
+    url = jres['media']['mp3']['uri']
+  else:
+    url = jres['media']['m2ts']['uri']
+  #alert(url)
+  xbmc.Player( xbmc.PLAYER_CORE_MPLAYER ).play(url)
 
 # if a programme hasn't been selected
 else:
