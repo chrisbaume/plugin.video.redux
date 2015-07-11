@@ -1,6 +1,6 @@
 import sys, xbmc, xbmcplugin, xbmcgui, xbmcaddon, json
 from urllib import urlencode
-from urllib2 import urlopen
+from urllib2 import urlopen, HTTPError
 from urlparse import parse_qs
 
 API_URL='https://i.bbcredux.com'
@@ -24,9 +24,11 @@ def alert(message):
 	xbmcgui.Dialog().ok('Error', message)
 
 def login(username, password):
-	data = json.loads(urlopen(url=API_URL+'/user/login?'+urlencode({'username': username, 'password': password})).read())
-	if data['success']: return data['token']
-	alert('Wrong username or password')
+	try:
+		data = json.loads(urlopen(url=API_URL+'/user/login?'+urlencode({'username': username, 'password': password})).read())
+		if data['success']: return data['token']
+	except HTTPError:
+		alert('Wrong username or password')
 	sys.exit(-1)
 
 def searchDialog():
@@ -38,7 +40,11 @@ def searchDialog():
 
 if mode is None:
 	token = login(username, password)
-	data = json.loads(urlopen(API_URL+'/asset/search?'+urlencode({'q': searchDialog(), 'titleonly': '1', 'token': token})).read())
+	try:
+		data = json.loads(urlopen(API_URL+'/asset/search?'+urlencode({'q': searchDialog(), 'titleonly': '1', 'token': token})).read())
+	except HTTPError:
+		alert('There was an error accessing Redux')
+		sys.exit(-1)
 	for item in data['results']['assets']:
 		listItem = xbmcgui.ListItem(item['name']+' - '+item['description'])
 		d = {'key': item['key'],
