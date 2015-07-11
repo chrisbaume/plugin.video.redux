@@ -3,5 +3,6 @@
 <category label="General">
 <setting id="username" type="text" label="Username" default="" />
 <setting id="password" type="text" option="hidden" label="Password" enable="!eq(-1,)" default="" />
+<setting id="format" type="labelenum" label="Format" values="Original stream|Stripped stream|H264 large|H264 small|MP3" />
 </category>
 </settings>

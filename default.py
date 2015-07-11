@@ -1,116 +1,54 @@
-import cgi, sys, string, xbmc, xbmcplugin, xbmcgui, json, urllib, urllib2
+import sys, xbmc, xbmcplugin, xbmcgui, xbmcaddon, json
+from urllib import urlencode
+from urllib2 import urlopen
+from urlparse import parse_qs
 
-def readParams(input):
-  args = cgi.parse_qs(input[1:])
-  params = {}
-  params['thisplugin'] = args.get('thisplugin', [None])[0]
-  params['username'] = args.get('username', [None])[0]
-  params['password'] = args.get('password', [None])[0]
-  params['diskref']  = args.get('diskref', [None])[0]
-  return params
+API_URL='https://i.bbcredux.com'
+formatMap = {'Original stream': 'ts',
+			'Stripped stream': 'strip',
+			'H264 large': 'h264_mp4_hi_v1.1',
+			'H264 small': 'h264_mp4_lo_v1.0',
+			'MP3': 'MP3_v1.0'}
 
-# removes duplicates from a list whilst preserving the order
-def f7(seq):
-  seen = set()
-  seen_add = seen.add
-  return [ x for x in seq if x not in seen and not seen_add(x)]
+base_url = sys.argv[0]
+addon_handle = int(sys.argv[1])
+args = parse_qs(sys.argv[2][1:])
+mode = args.get('mode', None)
 
-# sets up http basic auth
-def login(username, password):
-  auth_handler = urllib2.HTTPBasicAuthHandler()
-  auth_handler.add_password(realm='Redux',
-                          uri='http://devapi.bbcredux.com',
-                          user=username,
-                          passwd=password)
-  opener = urllib2.build_opener(auth_handler)
-  urllib2.install_opener(opener)
+addon = xbmcaddon.Addon()
+username = addon.getSetting('username')
+password = addon.getSetting('password')
+format = addon.getSetting('format')
 
-# process the given GET command
-def process(query):
-  req = urllib2.Request(url='http://devapi.bbcredux.com/'+query)
-  req.add_header('Accept','application/json')
-  try:
-    res = urllib2.urlopen(req)
-  except urllib2.HTTPError, e:
-    message = 'HTTP Error '+str(e.code)
-    if e.code == 401:
-      message = 'Wrong username or password'
-    dialog = xbmcgui.Dialog()
-    ok = dialog.ok('Error', message)
-  return res
-
-# pop up a dialog with a given message
 def alert(message):
-  dialog = xbmcgui.Dialog()
-  ok = dialog.ok('Error', message)
+	xbmcgui.Dialog().ok('Error', message)
 
-# prompt user for search and return text
+def login(username, password):
+	data = json.loads(urlopen(url=API_URL+'/user/login?'+urlencode({'username': username, 'password': password})).read())
+	if data['success']: return data['token']
+	alert('Wrong username or password')
+	sys.exit(-1)
+
 def searchDialog():
-  kb = xbmc.Keyboard('', 'Search for')
-  kb.doModal()
-  if not kb.isConfirmed():
-      return None;
-  searchterm = kb.getText().strip()
-  return searchterm
+	kb = xbmc.Keyboard('', 'Search for')
+	kb.doModal()
+	if not kb.isConfirmed(): return None;
+	searchterm = kb.getText().strip()
+	return searchterm
 
-# convert seconds to hh:mm:ss
-def seconds2duration(secs):
-  mins = floor(secs/60)
-  secs = secs - (mins*60)
-  hours = floor(mins/60)
-  mins = mins - (hours*60)
-  return str(hours)+':'+str(mins)+':'+str(secs)
-
-# grab plugin info
-thisPlugin = int(sys.argv[1])
-username = xbmcplugin.getSetting(thisPlugin,'username')
-password = xbmcplugin.getSetting(thisPlugin,'password')
-
-# if a programme has been selected
-if sys.argv[2] is not '':
-
-  params = readParams(sys.argv[2])
-  login(params['username'], params['password'])
-  res = process('programme/'+params['diskref'])
-  jres = json.loads(res.read())
-
-  if '2m-mp4' in jres['media']:
-    url = jres['media']['2m-mp4']['uri']
-  elif 'mp4-hi' in jres['media']:
-    url = jres['media']['mp4-hi']['uri']
-  elif 'mp4-lo' in jres['media']:
-    url = jres['media']['mp4-lo']['uri']
-  elif 'mp3' in jres['media']:
-    url = jres['media']['mp3']['uri']
-  else:
-    url = jres['media']['m2ts']['uri']
-  #alert(url)
-  xbmc.Player( xbmc.PLAYER_CORE_MPLAYER ).play(url)
-
-# if a programme hasn't been selected
-else:
-
-  # login
-  login(username, password)
-
-  # Check username/password is correct
-  process('user')
-
-  # display seach dialog and process request
-  searchText = searchDialog()
-  searchText = string.replace(searchText, ' ', '+')
-  res = process('search?q='+searchText)
-  jres = json.loads(res.read())
-
-  for item in jres['results']:
-    listItem = xbmcgui.ListItem(item['title']+' ('+item['date']+')', item['description'])
-    #if item['depiction'] is not None:
-    #  listItem.setThumbnailImage(item['depiction'])
-    d = {}
-    d['diskref'] = item['diskref']
-    d['username'] = username
-    d['password'] = password
-    d['thisplugin'] = thisPlugin
-    params = urllib.urlencode(d, True)
-    xbmcplugin.addDirectoryItem(thisPlugin, sys.argv[0]+'?'+params, listItem)
-  xbmcplugin.endOfDirectory(thisPlugin)
+if mode is None:
+	token = login(username, password)
+	data = json.loads(urlopen(API_URL+'/asset/search?'+urlencode({'q': searchDialog(), 'titleonly': '1', 'token': token})).read())
+	for item in data['results']['assets']:
+		listItem = xbmcgui.ListItem(item['name']+' - '+item['description'])
+		d = {'key': item['key'],
+			'reference': item['reference'],
+			'token': token,
+			'mode': 'play'}
+		xbmcplugin.addDirectoryItem(addon_handle, base_url+'?'+urlencode(d), listItem)
+	xbmcplugin.endOfDirectory(addon_handle)
+  
+elif mode[0] == 'play':
+	reference = args.get('reference', None)[0]
+	key = args.get('key', None)[0]
+	xbmc.Player( xbmc.PLAYER_CORE_MPLAYER ).play(API_URL+'/asset/media/'+reference+'/'+key+'/'+formatMap[format]+'/file')
